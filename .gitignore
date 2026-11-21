@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build & Bundle Outputs
+dist/
+build/
+.vite/
+
+# Playwright Test Outputs & Traces
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# Environment & Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Editor, OS & Temporary Files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.log
+npm-debug.log*
+scratch/
+tmp/
+temp/

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interactive Defect &amp; Fix Simulator — The Misaligned Comparison</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    body {
+      --foreground: #EDE9E0;
+      --muted-foreground: #A1A1AA;
+      --card: #1B1F21;
+      --card-border: rgba(223, 218, 206, 0.22);
+      background-color: #141617;
+      color: var(--foreground);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+  </style>
+</head>
+<body class="text-[var(--foreground)] antialiased p-4 m-0 select-none max-w-5xl mx-auto">
+  <div class="py-2 space-y-2.5">
+    <!-- Top Interactive Control Bar -->
+    <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[var(--card-border)] text-xs">
+      <div class="flex flex-wrap items-center gap-1.5">
+        <div class="inline-flex rounded border border-[var(--card-border)] bg-[var(--card)] p-0.5">
+          <button id="btn-mode-starter" type="button" class="px-2.5 py-1 rounded text-xs font-semibold transition-colors bg-amber-500/20 text-amber-400 border border-amber-500/40">
+            Starter (4 Defects)
+          </button>
+          <button id="btn-mode-ref" type="button" class="px-2.5 py-1 rounded text-xs font-semibold transition-colors text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
+            Reference Solution (Fixed)
+          </button>
+        </div>
+
+        <div class="inline-flex rounded border border-[var(--card-border)] bg-[var(--card)] p-0.5 font-mono">
+          <button data-preset="100" type="button" class="preset-btn px-2 py-1 rounded text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
+            Original (100%)
+          </button>
+          <button data-preset="50" type="button" class="preset-btn px-2 py-1 rounded text-xs bg-[#D9A62E] text-[#141617] font-bold">
+            Split (50%)
+          </button>
+          <button data-preset="0" type="button" class="preset-btn px-2 py-1 rounded text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
+            Transformed (0%)
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
+          <span>Simulate Resize:</span>
+          <input id="resize-slider" type="range" min="60" max="100" value="100" class="w-24 accent-[#D9A62E] cursor-pointer" />
+          <span id="resize-readout" class="font-mono tabular-nums text-[var(--foreground)] font-semibold w-10">100%</span>
+        </label>
+        <label class="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] cursor-pointer">
+          <input id="toggle-guides" type="checkbox" checked class="accent-[#D9A62E]" />
+          <span>Show Plumb &amp; Clip Guides</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Live Diagnostic Telemetry Pills -->
+    <div id="diagnostic-bar" class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs font-mono">
+      <div id="diag-plumb" class="px-2.5 py-1.5 rounded border border-[var(--card-border)] bg-[var(--card)] flex items-center justify-between">
+        <span class="text-[var(--muted-foreground)]">1. Plumb Drift:</span>
+        <span id="val-plumb" class="font-bold text-rose-400">22px FAIL</span>
+      </div>
+      <div id="diag-handle" class="px-2.5 py-1.5 rounded border border-[var(--card-border)] bg-[var(--card)] flex items-center justify-between">
+        <span class="text-[var(--muted-foreground)]">2. Edge Knob:</span>
+        <span id="val-handle" class="font-bold text-amber-400">Centered</span>
+      </div>
+      <div id="diag-resize" class="px-2.5 py-1.5 rounded border border-[var(--card-border)] bg-[var(--card)] flex items-center justify-between">
+        <span class="text-[var(--muted-foreground)]">3. Resize Sync:</span>
+        <span id="val-resize" class="font-bold text-emerald-400">0px (100% w)</span>
+      </div>
+      <div id="diag-pointer" class="px-2.5 py-1.5 rounded border border-[var(--card-border)] bg-[var(--card)] flex items-center justify-between">
+        <span class="text-[var(--muted-foreground)]">4. Pointer:</span>
+        <span id="val-pointer" class="font-bold text-rose-400">Drops on Leave</span>
+      </div>
+    </div>
+
+    <!-- Resizable Interactive Stage Wrapper -->
+    <div class="w-full flex justify-center bg-[#141617] border border-[var(--card-border)] p-3 rounded overflow-hidden">
+      <div
+        id="stage"
+        tabindex="0"
+        role="slider"
+        aria-label="Interactive before/after comparison simulator"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow="50"
+        style="width: 100%; height: 248px;"
+        class="relative overflow-hidden border border-[#EDE9E0]/25 bg-[#08090A] cursor-ew-resize focus:outline-none focus:ring-2 focus:ring-[#D9A62E]"
+      >
+        <!-- AFTER LAYER (Linear Obsidian Tokens: 46px inset in Starter, 40px shared inset in Reference) -->
+        <div id="after-canvas" class="absolute top-0 left-0 origin-top-left pointer-events-none" style="width: 680px; height: 248px; background: #08090A; color: #F7F8F8;">
+          <!-- Header -->
+          <div id="after-header" class="flex items-center justify-between border-b border-white/10 py-2" style="padding-left: 46px; padding-right: 46px; background: rgba(15,16,17,0.9);">
+            <div class="flex items-center gap-2 font-mono text-xs font-bold">
+              <span class="inline-block w-2 h-2 rounded-full bg-[#5E6AD2]"></span>
+              <span>CM // SPECIMEN-04</span>
+              <span class="text-[#8A8F98] font-normal pl-2 border-l border-white/15">Overview · Pipelines · Verification</span>
+            </div>
+            <span class="font-mono text-xs px-2 py-0.5 rounded-full bg-white/5 text-[#D0D6E0] border border-white/10">AFTER · LINEAR TOKENS</span>
+          </div>
+          <!-- Body -->
+          <div id="after-body" class="py-3 space-y-2.5" style="padding-left: 46px; padding-right: 46px;">
+            <div class="text-xs font-mono text-[#828FFF] uppercase tracking-wider">01 / Synthetic Interface Specimen</div>
+            <h3 class="text-lg font-medium tracking-tight text-[#F7F8F8] m-0 leading-tight">Deterministic workflow telemetry for operational teams.</h3>
+            <p class="text-xs text-[#8A8F98] m-0 leading-snug">Standardizes intake routing, latency thresholds, and verification gates across distributed product environments.</p>
+            <div class="grid grid-cols-3 gap-2.5 pt-1">
+              <div class="p-2.5 rounded-lg bg-[#0F1011] border border-white/10">
+                <div class="font-mono text-xs text-[#8A8F98]">01 / INGESTION</div>
+                <div class="text-sm font-semibold text-[#F7F8F8] mt-0.5">1,420 req/s</div>
+                <div class="text-xs text-[#68CC58] font-mono">+12.4% vs base</div>
+              </div>
+              <div class="p-2.5 rounded-lg bg-[#0F1011] border border-white/10">
+                <div class="font-mono text-xs text-[#8A8F98]">02 / LATENCY</div>
+                <div class="text-sm font-semibold text-[#F7F8F8] mt-0.5">18.4 ms</div>
+                <div class="text-xs text-[#68CC58] font-mono">p99 &lt; 24.0ms</div>
+              </div>
+              <div class="p-2.5 rounded-lg bg-[#0F1011] border border-white/10">
+                <div class="font-mono text-xs text-[#8A8F98]">03 / GATES</div>
+                <div class="text-sm font-semibold text-[#F7F8F8] mt-0.5">100.0%</div>
+                <div class="text-xs text-[#828FFF] font-mono">14 / 14 active</div>
+              </div>
+            </div>
+          </div>
+          <!-- Plumb Guide After -->
+          <div id="guide-after" class="absolute top-0 bottom-0 border-l-2 border-dashed border-rose-500/80 pointer-events-none" style="left: 46px;">
+            <span id="guide-after-label" class="absolute bottom-1.5 left-1.5 bg-rose-950/90 text-rose-300 border border-rose-500/50 px-1.5 py-0.5 font-mono text-xs whitespace-nowrap">
+              After Plumb: x=46px (+22px drift)
+            </span>
+          </div>
+        </div>
+
+        <!-- BEFORE LAYER (Neutral Baseline: 24px inset in Starter, 40px shared inset in Reference) -->
+        <div id="before-layer" class="absolute inset-0 pointer-events-none" style="clip-path: inset(0 50% 0 0);">
+          <div id="before-canvas" class="absolute top-0 left-0 origin-top-left" style="width: 680px; height: 248px; background: #F4F4F5; color: #18181B;">
+            <!-- Header -->
+            <div id="before-header" class="flex items-center justify-between border-b border-zinc-200 py-2 bg-white" style="padding-left: 24px; padding-right: 24px;">
+              <div class="flex items-center gap-2 font-mono text-xs font-bold text-zinc-900">
+                <span class="inline-block w-2 h-2 rounded-sm bg-zinc-800"></span>
+                <span>CM // SPECIMEN-04</span>
+                <span class="text-zinc-500 font-normal pl-2 border-l border-zinc-300">Overview · Pipelines · Verification</span>
+              </div>
+              <span class="font-mono text-xs px-2 py-0.5 rounded bg-zinc-100 text-zinc-700 border border-zinc-300">BEFORE · NEUTRAL</span>
+            </div>
+            <!-- Body -->
+            <div id="before-body" class="py-3 space-y-2.5" style="padding-left: 24px; padding-right: 24px;">
+              <div class="text-xs font-mono text-zinc-600 uppercase tracking-wider">01 / Synthetic Interface Specimen</div>
+              <h3 class="text-lg font-semibold tracking-tight text-zinc-900 m-0 leading-tight">Deterministic workflow telemetry for operational teams.</h3>
+              <p class="text-xs text-zinc-600 m-0 leading-snug">Standardizes intake routing, latency thresholds, and verification gates across distributed product environments.</p>
+              <div class="grid grid-cols-3 gap-2.5 pt-1">
+                <div class="p-2.5 rounded-md bg-white border border-zinc-200 shadow-sm">
+                  <div class="font-mono text-xs text-zinc-500">01 / INGESTION</div>
+                  <div class="text-sm font-bold text-zinc-900 mt-0.5">1,420 req/s</div>
+                  <div class="text-xs text-zinc-600 font-mono">+12.4% vs base</div>
+                </div>
+                <div class="p-2.5 rounded-md bg-white border border-zinc-200 shadow-sm">
+                  <div class="font-mono text-xs text-zinc-500">02 / LATENCY</div>
+                  <div class="text-sm font-bold text-zinc-900 mt-0.5">18.4 ms</div>
+                  <div class="text-xs text-zinc-600 font-mono">p99 &lt; 24.0ms</div>
+                </div>
+                <div class="p-2.5 rounded-md bg-white border border-zinc-200 shadow-sm">
+                  <div class="font-mono text-xs text-zinc-500">03 / GATES</div>
+                  <div class="text-sm font-bold text-zinc-900 mt-0.5">100.0%</div>
+                  <div class="text-xs text-zinc-600 font-mono">14 / 14 active</div>
+                </div>
+              </div>
+            </div>
+            <!-- Plumb Guide Before -->
+            <div id="guide-before" class="absolute top-0 bottom-0 border-l-2 border-dashed border-sky-600/85 pointer-events-none" style="left: 24px;">
+              <span id="guide-before-label" class="absolute top-10 left-1.5 bg-sky-950/90 text-sky-200 border border-sky-500/50 px-1.5 py-0.5 font-mono text-xs whitespace-nowrap">
+                Before Plumb: x=24px
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Desync Clip Seam Indicator (Visible when Starter resize desyncs clipPath from Divider) -->
+        <div id="clip-seam-indicator" class="hidden absolute top-0 bottom-0 z-20 border-l-2 border-dotted border-rose-500 pointer-events-none">
+          <span class="absolute top-2 left-1.5 bg-rose-950/95 text-rose-200 border border-rose-500 px-1.5 py-0.5 font-mono text-xs whitespace-nowrap">
+            Actual Clip Seam (Desynced!)
+          </span>
+        </div>
+
+        <!-- Vertical Split Divider & 44x44 Handle -->
+        <div id="divider" class="absolute top-0 bottom-0 z-30 -ml-px w-0.5 bg-[#D9A62E] shadow-[0_0_10px_rgba(0,0,0,0.85)] pointer-events-none" style="left: 50%;">
+          <div
+            id="handle"
+            class="absolute top-1/2 flex w-11 h-11 items-center justify-center border-2 border-[#141617] bg-[#D9A62E] text-[#141617] shadow-xl font-mono text-xs font-bold"
+            style="transform: translate(-50%, -50%);"
+          >
+            ↔
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const CANONICAL_W = 680;
+      let mode = 'starter'; // 'starter' | 'reference'
+      let sliderPct = 50;
+      let resizePct = 100;
+      let showGuides = true;
+      let isDragging = false;
+      let initialMountW = 680;
+      let dividerPx = 340;
+
+      const stage = document.getElementById('stage');
+      const beforeLayer = document.getElementById('before-layer');
+      const beforeCanvas = document.getElementById('before-canvas');
+      const afterCanvas = document.getElementById('after-canvas');
+      const beforeHeader = document.getElementById('before-header');
+      const beforeBody = document.getElementById('before-body');
+      const afterHeader = document.getElementById('after-header');
+      const afterBody = document.getElementById('after-body');
+      const guideBefore = document.getElementById('guide-before');
+      const guideAfter = document.getElementById('guide-after');
+      const guideBeforeLabel = document.getElementById('guide-before-label');
+      const guideAfterLabel = document.getElementById('guide-after-label');
+      const clipSeamIndicator = document.getElementById('clip-seam-indicator');
+      const divider = document.getElementById('divider');
+      const handle = document.getElementById('handle');
+
+      const btnStarter = document.getElementById('btn-mode-starter');
+      const btnRef = document.getElementById('btn-mode-ref');
+      const resizeSlider = document.getElementById('resize-slider');
+      const resizeReadout = document.getElementById('resize-readout');
+      const toggleGuides = document.getElementById('toggle-guides');
+      const presetBtns = document.querySelectorAll('.preset-btn');
+
+      const valPlumb = document.getElementById('val-plumb');
+      const valHandle = document.getElementById('val-handle');
+      const valResize = document.getElementById('val-resize');
+      const valPointer = document.getElementById('val-pointer');
+
+      function render() {
+        stage.style.width = resizePct + '%';
+        const rect = stage.getBoundingClientRect();
+        const currentW = rect.width || CANONICAL_W;
+
+        if (resizePct === 100) {
+          initialMountW = currentW;
+        }
+
+        const rounded = Math.round(sliderPct);
+        presetBtns.forEach((b) => {
+          const p = Number(b.getAttribute('data-preset'));
+          const active = (p === 100 && rounded === 100) || (p === 0 && rounded === 0) || (p === 50 && rounded > 0 && rounded < 100);
+          b.className = active
+            ? 'preset-btn px-2 py-1 rounded text-xs bg-[#D9A62E] text-[#141617] font-bold'
+            : 'preset-btn px-2 py-1 rounded text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]';
+          if (p === 50) b.textContent = 'Split (' + rounded + '%)';
+        });
+
+        stage.setAttribute('aria-valuenow', String(rounded));
+
+        if (mode === 'starter') {
+          beforeHeader.style.paddingLeft = '24px';
+          beforeHeader.style.paddingRight = '24px';
+          beforeBody.style.paddingLeft = '24px';
+          beforeBody.style.paddingRight = '24px';
+          afterHeader.style.paddingLeft = '46px';
+          afterHeader.style.paddingRight = '46px';
+          afterBody.style.paddingLeft = '46px';
+          afterBody.style.paddingRight = '46px';
+
+          guideBefore.style.left = '24px';
+          guideAfter.style.left = '46px';
+          guideAfter.className = 'absolute top-0 bottom-0 border-l-2 border-dashed border-rose-500/85 pointer-events-none';
+          guideBeforeLabel.textContent = 'Before Plumb: x=24px';
+          guideAfterLabel.textContent = 'After Plumb: x=46px (+22px DRIFT)';
+          guideAfterLabel.className = 'absolute bottom-2 left-1.5 bg-rose-950/90 text-rose-300 border border-rose-500/50 px-1.5 py-0.5 font-mono text-xs whitespace-nowrap';
+
+          const initialScale = initialMountW / CANONICAL_W;
+          beforeCanvas.style.transform = 'scale(' + initialScale + ')';
+          afterCanvas.style.transform = 'scale(' + initialScale + ')';
+
+          dividerPx = (sliderPct / 100) * initialMountW;
+          const rightClipPx = Math.max(0, initialMountW - dividerPx);
+          beforeLayer.style.clipPath = 'inset(0 ' + rightClipPx + 'px 0 0)';
+          divider.style.left = dividerPx + 'px';
+
+          const actualClipX = currentW - rightClipPx;
+          const desyncPx = Math.round(Math.abs(dividerPx - actualClipX));
+          if (desyncPx > 3 && showGuides) {
+            clipSeamIndicator.classList.remove('hidden');
+            clipSeamIndicator.style.left = Math.max(0, actualClipX) + 'px';
+          } else {
+            clipSeamIndicator.classList.add('hidden');
+          }
+
+          handle.style.transform = 'translate(-50%, -50%)';
+
+          valPlumb.textContent = '22px FAIL';
+          valPlumb.className = 'font-bold text-rose-400';
+
+          if (rounded <= 5 || rounded >= 95) {
+            valHandle.textContent = '22px CLIPPED';
+            valHandle.className = 'font-bold text-rose-400';
+          } else {
+            valHandle.textContent = 'Try 0% / 100%';
+            valHandle.className = 'font-bold text-amber-400';
+          }
+
+          if (desyncPx > 2) {
+            valResize.textContent = desyncPx + 'px DESYNC';
+            valResize.className = 'font-bold text-rose-400';
+          } else {
+            valResize.textContent = 'Drag Resize ←';
+            valResize.className = 'font-bold text-amber-400';
+          }
+
+          valPointer.textContent = 'Drops on Leave';
+          valPointer.className = 'font-bold text-rose-400';
+        } else {
+          beforeHeader.style.paddingLeft = '40px';
+          beforeHeader.style.paddingRight = '40px';
+          beforeBody.style.paddingLeft = '40px';
+          beforeBody.style.paddingRight = '40px';
+          afterHeader.style.paddingLeft = '40px';
+          afterHeader.style.paddingRight = '40px';
+          afterBody.style.paddingLeft = '40px';
+          afterBody.style.paddingRight = '40px';
+
+          guideBefore.style.left = '40px';
+          guideAfter.style.left = '40px';
+          guideAfter.className = 'absolute top-0 bottom-0 border-l-2 border-dashed border-emerald-400/90 pointer-events-none';
+          guideBeforeLabel.textContent = 'Shared Plumb: x=40px (Before)';
+          guideAfterLabel.textContent = 'Shared Plumb: x=40px (0px DRIFT ✓)';
+          guideAfterLabel.className = 'absolute bottom-2 left-1.5 bg-emerald-950/90 text-emerald-300 border border-emerald-500/50 px-1.5 py-0.5 font-mono text-xs whitespace-nowrap';
+
+          const liveScale = currentW / CANONICAL_W;
+          beforeCanvas.style.transform = 'scale(' + liveScale + ')';
+          afterCanvas.style.transform = 'scale(' + liveScale + ')';
+
+          beforeLayer.style.clipPath = 'inset(0 ' + (100 - sliderPct) + '% 0 0)';
+          divider.style.left = sliderPct + '%';
+          clipSeamIndicator.classList.add('hidden');
+
+          handle.style.transform = 'translate(' + (-sliderPct) + '%, -50%)';
+
+          valPlumb.textContent = '0px PASS ✓';
+          valPlumb.className = 'font-bold text-emerald-400';
+          valHandle.textContent = 'Unclipped ✓';
+          valHandle.className = 'font-bold text-emerald-400';
+          valResize.textContent = '0px Synced ✓';
+          valResize.className = 'font-bold text-emerald-400';
+          valPointer.textContent = 'Captured ✓';
+          valPointer.className = 'font-bold text-emerald-400';
+        }
+
+        guideBefore.style.display = showGuides ? 'block' : 'none';
+        guideAfter.style.display = showGuides ? 'block' : 'none';
+      }
+
+      function updateFromClientX(clientX) {
+        const rect = stage.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        const pct = ((clientX - rect.left) / rect.width) * 100;
+        sliderPct = Math.max(0, Math.min(100, pct));
+        render();
+      }
+
+      btnStarter.addEventListener('click', () => {
+        mode = 'starter';
+        btnStarter.className = 'px-2.5 py-1 rounded text-xs font-semibold transition-colors bg-amber-500/20 text-amber-400 border border-amber-500/40';
+        btnRef.className = 'px-2.5 py-1 rounded text-xs font-semibold transition-colors text-[var(--muted-foreground)] hover:text-[var(--foreground)]';
+        render();
+      });
+
+      btnRef.addEventListener('click', () => {
+        mode = 'reference';
+        btnRef.className = 'px-2.5 py-1 rounded text-xs font-semibold transition-colors bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
+        btnStarter.className = 'px-2.5 py-1 rounded text-xs font-semibold transition-colors text-[var(--muted-foreground)] hover:text-[var(--foreground)]';
+        render();
+      });
+
+      presetBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          sliderPct = Number(btn.getAttribute('data-preset'));
+          render();
+        });
+      });
+
+      resizeSlider.addEventListener('input', (e) => {
+        resizePct = Number(e.target.value);
+        resizeReadout.textContent = resizePct + '%';
+        render();
+      });
+
+      toggleGuides.addEventListener('change', (e) => {
+        showGuides = e.target.checked;
+        render();
+      });
+
+      stage.addEventListener('pointerdown', (e) => {
+        isDragging = true;
+        if (mode === 'reference') {
+          try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+        }
+        updateFromClientX(e.clientX);
+      });
+
+      stage.addEventListener('pointermove', (e) => {
+        if (!isDragging) return;
+        updateFromClientX(e.clientX);
+      });
+
+      stage.addEventListener('pointerleave', () => {
+        if (mode === 'starter' && isDragging) {
+          isDragging = false;
+        }
+      });
+
+      window.addEventListener('pointerup', () => {
+        isDragging = false;
+      });
+
+      stage.addEventListener('keydown', (e) => {
+        const step = e.shiftKey ? 10 : 2;
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          sliderPct = Math.max(0, sliderPct - step);
+          render();
+        } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          sliderPct = Math.min(100, sliderPct + step);
+          render();
+        } else if (e.key === 'Home' && mode === 'reference') {
+          e.preventDefault();
+          sliderPct = 0;
+          render();
+        } else if (e.key === 'End' && mode === 'reference') {
+          e.preventDefault();
+          sliderPct = 100;
+          render();
+        }
+      });
+
+      window.addEventListener('resize', render);
+      setTimeout(render, 30);
+    })();
+  </script>
+</body>
+</html>
